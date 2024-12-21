@@ -16,7 +16,8 @@ run: stop
 		-v $(CURDIR)/examples/pipelines/providers/perplexity_manifold_pipeline.py:/app/pipelines/perplexity_manifold_pipeline.py \
 		-v $(CURDIR)/examples/pipelines/providers/cloudflare_ai_pipeline.py:/app/pipelines/cloudflare_ai_pipeline.py \
 		-v $(CURDIR)/examples/pipelines/providers/groq_manifold_pipeline.py:/app/pipelines/groq_manifold_pipeline.py \
-		-v $(CURDIR)/examples/pipelines/providers/ollama_pipeline.py:/app/pipelines/ollama_pipeline.py \
+		-v $(CURDIR)/examples/pipelines/providers/ollama_manifold_pipeline.py:/app/pipelines/ollama_manifold_pipeline.py \
+		-v $(CURDIR)/examples/pipelines/providers/openai_manifold_pipeline.py:/app/pipelines/openai_manifold_pipeline.py \
 		--name $(CONTAINER_NAME) \
 		--restart always \
 		$(IMAGE_NAME)
