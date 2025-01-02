@@ -136,7 +136,7 @@ class Pipeline:
                 # Format the response with citations
                 content = response["choices"][0]["message"]["content"]
                 if citations:
-                    content += "\n\nSources:\n" + "\n".join([f"• {citation}" for citation in citations])
+                    content = f"{content}\n\n<b>Sources:</b>\n" + "\n".join([f"• {citation}" for citation in citations])
 
                 formatted_response = {
                     "id": response["id"],
