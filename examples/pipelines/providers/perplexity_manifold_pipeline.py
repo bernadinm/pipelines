@@ -125,6 +125,19 @@ class Pipeline:
                 return r.iter_lines()
             else:
                 response = r.json()
+                # Extract citations if they exist
+                citations = []
+                if "citations" in response:
+                    citations = [
+                        f'<a href="{citation["url"]}" target="_blank" rel="noopener noreferrer">{citation["title"]}</a>'
+                        for citation in response["citations"]
+                    ]
+                
+                # Format the response with citations
+                content = response["choices"][0]["message"]["content"]
+                if citations:
+                    content += "\n\nSources:\n" + "\n".join([f"• {citation}" for citation in citations])
+
                 formatted_response = {
                     "id": response["id"],
                     "model": response["model"],
@@ -137,7 +150,7 @@ class Pipeline:
                             "finish_reason": choice["finish_reason"],
                             "message": {
                                 "role": choice["message"]["role"],
-                                "content": choice["message"]["content"]
+                                "content": content
                             },
                             "delta": {"role": "assistant", "content": ""}
                         } for choice in response["choices"]
