@@ -30,26 +30,28 @@ class Pipeline:
         # List of models
         self.pipelines = [
             {
-                "id": "llama-3.1-sonar-large-128k-online",
-                "name": "Llama 3.1 Sonar Large 128k Online"
+                "id": "sonar-deep-research",
+                "name": "Sonar Deep Research (128k)"
             },
             {
-                "id": "llama-3.1-sonar-small-128k-online",
-                "name": "Llama 3.1 Sonar Small 128k Online"
+                "id": "sonar-reasoning-pro",
+                "name": "Sonar Reasoning Pro (128k)"
             },
             {
-                "id": "llama-3.1-sonar-large-128k-chat",
-                "name": "Llama 3.1 Sonar Large 128k Chat"
+                "id": "sonar-reasoning",
+                "name": "Sonar Reasoning (128k)"
             },
             {
-                "id": "llama-3.1-sonar-small-128k-chat",
-                "name": "Llama 3.1 Sonar Small 128k Chat"
+                "id": "sonar-pro",
+                "name": "Sonar Pro (200k)"
             },
             {
-                "id": "llama-3.1-8b-instruct", "name": "Llama 3.1 8B Instruct"
+                "id": "sonar",
+                "name": "Sonar (128k)"
             },
             {
-                "id": "llama-3.1-70b-instruct", "name": "Llama 3.1 70B Instruct"
+                "id": "r1-1776",
+                "name": "R1-1776 (128k)"
             }
         ]
         pass
@@ -176,6 +178,6 @@ if __name__ == "__main__":
     pipeline = Pipeline()
     pipeline.valves.PERPLEXITY_API_KEY = args.api_key
     response = pipeline.pipe(
-        user_message=args.prompt, model_id="llama-3-sonar-large-32k-online", messages=[], body={"stream": False})
+        user_message=args.prompt, model_id="sonar", messages=[], body={"stream": False})
 
     print("Response:", response)
