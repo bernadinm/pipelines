@@ -215,11 +215,20 @@ class Pipeline:
         if not payload.get("messages"):
             return "Error: No messages provided in the request"
         
-        # For Cloudflare, we need to use the chat completions endpoint
-        url = f"{self.base_url}/{self.valves.CLOUDFLARE_ACCOUNT_ID}/ai/v1/chat/completions"
-        
-        # Add the model to the payload
-        payload["model"] = model_name
+        # Cloudflare has two different endpoints we can try
+        # First, try the v1 chat completions endpoint
+        if model_name.startswith("@cf/"):
+            # For models with @cf/ prefix, use the run endpoint
+            model_id_for_url = model_name.replace("@cf/", "")
+            url = f"{self.base_url}/{self.valves.CLOUDFLARE_ACCOUNT_ID}/ai/run/{model_id_for_url}"
+            # Remove model from payload as it's in the URL
+            if "model" in payload:
+                del payload["model"]
+        else:
+            # For other models, use the chat completions endpoint
+            url = f"{self.base_url}/{self.valves.CLOUDFLARE_ACCOUNT_ID}/ai/v1/chat/completions"
+            # Keep model in payload
+            payload["model"] = model_name
         
         print(f"Sending request to {url}")
         
@@ -235,6 +244,9 @@ class Pipeline:
                 stream=True,
                 timeout=60  # Add timeout to prevent hanging
             )
+            
+            print(f"Response status: {r.status_code}")
+            print(f"Response headers: {r.headers}")
             
             # Handle non-200 responses
             if r.status_code != 200:
@@ -264,6 +276,39 @@ class Pipeline:
                 
                 # Add troubleshooting information
                 error_message += "\n\nTroubleshooting: Please check that your Cloudflare API key and Account ID are correct and have the necessary permissions."
+                
+                # If first attempt failed and we used the run endpoint, try the chat completions endpoint as fallback
+                if url.endswith(f"/ai/run/{model_id_for_url}") and r.status_code in [400, 404]:
+                    print(f"First attempt failed with {r.status_code}, trying chat completions endpoint as fallback")
+                    fallback_url = f"{self.base_url}/{self.valves.CLOUDFLARE_ACCOUNT_ID}/ai/v1/chat/completions"
+                    fallback_payload = dict(payload)
+                    fallback_payload["model"] = model_name
+                    
+                    try:
+                        print(f"Sending fallback request to {fallback_url}")
+                        print(f"Fallback payload: {json.dumps(fallback_payload, indent=2)}")
+                        
+                        r_fallback = requests.post(
+                            url=fallback_url,
+                            json=fallback_payload,
+                            headers=self.headers,
+                            stream=True,
+                            timeout=60
+                        )
+                        
+                        print(f"Fallback response status: {r_fallback.status_code}")
+                        
+                        if r_fallback.status_code == 200:
+                            print("Fallback request succeeded")
+                            r = r_fallback  # Use the successful response
+                            # Continue with normal processing below
+                            if fallback_payload["stream"]:
+                                return r.iter_lines()
+                            else:
+                                return r.json()
+                    except Exception as fallback_e:
+                        print(f"Fallback request failed: {str(fallback_e)}")
+                        # Continue with original error
                 
                 return error_message
             
