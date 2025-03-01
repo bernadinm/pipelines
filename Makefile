@@ -30,7 +30,7 @@ YELLOW=\033[0;33m
 RED=\033[0;31m
 NC=\033[0m # No Color
 
-.PHONY: all run stop restart logs clean status help pull update
+.PHONY: all run stop restart logs clean status help pull update git-status git-fetch-upstream git-update-fork git-safe-update
 
 all: run
 
@@ -109,6 +109,49 @@ pull:
 update: pull restart
 	@echo "${GREEN}Container updated to latest image and restarted${NC}"
 
+# Git repository management commands
+git-status:
+	@echo "${YELLOW}Git repository status:${NC}"
+	@git status
+
+git-fetch-upstream:
+	@echo "${YELLOW}Fetching from upstream repository...${NC}"
+	@if git remote | grep -q "upstream"; then \
+		git fetch upstream; \
+		echo "${GREEN}Fetched latest changes from upstream${NC}"; \
+	else \
+		echo "${RED}No 'upstream' remote found. Add it with:${NC}"; \
+		echo "git remote add upstream https://github.com/open-webui/pipelines.git"; \
+	fi
+
+git-update-fork:
+	@echo "${YELLOW}Updating fork with upstream changes...${NC}"
+	@if git remote | grep -q "upstream"; then \
+		git fetch upstream; \
+		echo "${YELLOW}Current branch: $$(git branch --show-current)${NC}"; \
+		echo "${YELLOW}Stashing any local changes...${NC}"; \
+		git stash; \
+		echo "${YELLOW}Rebasing on upstream/main...${NC}"; \
+		git rebase upstream/main; \
+		echo "${YELLOW}Applying stashed changes (if any)...${NC}"; \
+		git stash pop 2>/dev/null || echo "${YELLOW}No stashed changes to apply${NC}"; \
+		echo "${GREEN}Fork updated successfully${NC}"; \
+	else \
+		echo "${RED}No 'upstream' remote found. Add it with:${NC}"; \
+		echo "git remote add upstream https://github.com/open-webui/pipelines.git"; \
+	fi
+
+git-safe-update: git-status
+	@echo "${YELLOW}Preparing for safe update...${NC}"
+	@read -p "Continue with update? [y/N] " confirm && \
+	if [ "$$confirm" = "y" ] || [ "$$confirm" = "Y" ]; then \
+		$(MAKE) git-update-fork; \
+		echo "${GREEN}Repository updated. Now updating container...${NC}"; \
+		$(MAKE) update; \
+	else \
+		echo "${YELLOW}Update canceled${NC}"; \
+	fi
+
 shell:
 	@if [ $$(docker ps -q -f name=$(CONTAINER_NAME)) ]; then \
 		echo "${YELLOW}Opening shell in container $(CONTAINER_NAME)...${NC}"; \
@@ -130,4 +173,11 @@ help:
 	@echo "  ${YELLOW}make pull${NC}         - Pull the latest image"
 	@echo "  ${YELLOW}make update${NC}       - Pull latest image and restart container"
 	@echo "  ${YELLOW}make shell${NC}        - Open a shell in the running container"
+	@echo ""
+	@echo "${GREEN}Git management commands:${NC}"
+	@echo "  ${YELLOW}make git-status${NC}       - Show git repository status"
+	@echo "  ${YELLOW}make git-fetch-upstream${NC} - Fetch latest changes from upstream"
+	@echo "  ${YELLOW}make git-update-fork${NC}  - Update fork with upstream changes (rebase)"
+	@echo "  ${YELLOW}make git-safe-update${NC}  - Interactive safe update with confirmation"
+	@echo ""
 	@echo "  ${YELLOW}make help${NC}         - Show this help message"
