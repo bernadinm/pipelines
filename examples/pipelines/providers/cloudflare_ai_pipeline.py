@@ -31,15 +31,11 @@ class Pipeline:
         
         # Add default models in case API fails
         self.default_models = [
-            {"id": "@cf/meta/llama-3.1-8b-instruct", "name": "Llama 3.1 8B Instruct"},
-            {"id": "@cf/meta/llama-3.1-70b-instruct", "name": "Llama 3.1 70B Instruct"},
             {"id": "@cf/meta/llama-3-8b-instruct", "name": "Llama 3 8B Instruct"},
             {"id": "@cf/meta/llama-3-70b-instruct", "name": "Llama 3 70B Instruct"},
             {"id": "@cf/mistral/mistral-7b-instruct-v0.1", "name": "Mistral 7B Instruct"},
             {"id": "@cf/mistral/mistral-large-latest", "name": "Mistral Large"},
-            {"id": "@cf/anthropic/claude-3-haiku-20240307", "name": "Claude 3 Haiku"},
-            {"id": "@cf/anthropic/claude-3-sonnet-20240229", "name": "Claude 3 Sonnet"},
-            {"id": "@cf/anthropic/claude-3-opus-20240229", "name": "Claude 3 Opus"},
+            {"id": "@cf/anthropic/claude-instant-v1", "name": "Claude Instant"},
         ]
         
         self.valves = self.Valves(
@@ -82,9 +78,9 @@ class Pipeline:
         print(f"Using Cloudflare Account ID: {self.valves.CLOUDFLARE_ACCOUNT_ID[:5]}...")
         
         try:
-            # Try to get models from the API using the correct search endpoint
+            # Try to get models from the API
             print(f"Fetching models from Cloudflare AI API")
-            url = f"{self.base_url}/{self.valves.CLOUDFLARE_ACCOUNT_ID}/ai/models/search"
+            url = f"{self.base_url}/{self.valves.CLOUDFLARE_ACCOUNT_ID}/ai/models"
             print(f"Request URL: {url}")
             print(f"Request headers: {self.headers}")
             
@@ -206,9 +202,8 @@ class Pipeline:
             return f"Error: Model '{model_name}' not found in available Cloudflare models. Please select a different model."
         
         # Create a clean payload with only the fields Cloudflare API expects
-        # Note: Cloudflare expects the model name without the @cf/ prefix in the URL
-        # but we keep it in the model_name variable for validation
         payload = {
+            "model": model_name,
             "messages": body.get("messages", []),
             "stream": body.get("stream", True),
         }
@@ -227,9 +222,12 @@ class Pipeline:
         if not payload.get("messages"):
             return "Error: No messages provided in the request"
         
-        # For Cloudflare, we need to use the run endpoint with the model name in the URL
-        # The model name should be passed without the @cf/ prefix in the URL
-        url = f"{self.base_url}/{self.valves.CLOUDFLARE_ACCOUNT_ID}/ai/run/{model_name}"
+        # For Cloudflare, we need to use the chat completions endpoint
+        url = f"{self.base_url}/{self.valves.CLOUDFLARE_ACCOUNT_ID}/ai/chat/completions"
+        
+        # Add the model to the payload instead of the URL
+        payload["model"] = model_name
+        
         print(f"Sending request to {url}")
         
         try:
