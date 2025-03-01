@@ -29,6 +29,19 @@ class Pipeline:
         self.id = "cloudflare"
         self.name = "Cloudflare AI: "
         
+        # Add default models in case API fails
+        self.default_models = [
+            {"id": "@cf/meta/llama-3.1-8b-instruct", "name": "Llama 3.1 8B Instruct"},
+            {"id": "@cf/meta/llama-3.1-70b-instruct", "name": "Llama 3.1 70B Instruct"},
+            {"id": "@cf/meta/llama-3-8b-instruct", "name": "Llama 3 8B Instruct"},
+            {"id": "@cf/meta/llama-3-70b-instruct", "name": "Llama 3 70B Instruct"},
+            {"id": "@cf/mistral/mistral-7b-instruct-v0.1", "name": "Mistral 7B Instruct"},
+            {"id": "@cf/mistral/mistral-large-latest", "name": "Mistral Large"},
+            {"id": "@cf/anthropic/claude-3-haiku-20240307", "name": "Claude 3 Haiku"},
+            {"id": "@cf/anthropic/claude-3-sonnet-20240229", "name": "Claude 3 Sonnet"},
+            {"id": "@cf/anthropic/claude-3-opus-20240229", "name": "Claude 3 Opus"},
+        ]
+        
         self.valves = self.Valves(
             **{
                 "CLOUDFLARE_ACCOUNT_ID": os.getenv(
@@ -44,7 +57,11 @@ class Pipeline:
         
         self.base_url = "https://api.cloudflare.com/client/v4/accounts"
         self.update_headers()
-        self.pipelines = self.get_cloudflare_models()
+        
+        # Try to get models from API, fall back to defaults if none found
+        api_models = self.get_cloudflare_models()
+        self.pipelines = api_models if api_models else self.default_models
+        print(f"Initialized with {len(self.pipelines)} models")
 
     def update_headers(self):
         self.headers = {
@@ -61,19 +78,32 @@ class Pipeline:
         if not self.valves.CLOUDFLARE_API_KEY or not self.valves.CLOUDFLARE_ACCOUNT_ID:
             print("No Cloudflare credentials provided, returning empty model list")
             return []
+            
+        print(f"Using Cloudflare Account ID: {self.valves.CLOUDFLARE_ACCOUNT_ID[:5]}...")
         
         try:
             # Try to get models from the API
             print(f"Fetching models from Cloudflare AI API")
             url = f"{self.base_url}/{self.valves.CLOUDFLARE_ACCOUNT_ID}/ai/models"
+            print(f"Request URL: {url}")
+            print(f"Request headers: {self.headers}")
             
             response = requests.get(url, headers=self.headers, timeout=10)
             
+            print(f"Response status: {response.status_code}")
+            print(f"Response headers: {response.headers}")
+            
             if response.status_code != 200:
                 print(f"Failed to fetch models: {response.status_code} {response.reason}")
+                try:
+                    error_data = response.json()
+                    print(f"Error response: {json.dumps(error_data, indent=2)}")
+                except:
+                    print(f"Error text: {response.text}")
                 return []
                 
             data = response.json()
+            print(f"Response data: {json.dumps(data, indent=2)}")
             
             if not data.get('success', False) or 'result' not in data:
                 print(f"Unexpected response format: {data}")
@@ -81,14 +111,23 @@ class Pipeline:
                 
             # Extract models from the response
             models = []
-            for model in data['result']:
+            print(f"Processing {len(data.get('result', []))} models from response")
+            
+            for model in data.get('result', []):
                 model_id = model.get('id', '')
-                if model_id and model.get('capabilities', {}).get('chat_completions', False):
+                capabilities = model.get('capabilities', {})
+                print(f"Model: {model_id}, Capabilities: {capabilities}")
+                
+                # Check if model supports chat completions
+                if model_id:
+                    # Some models might not explicitly list chat_completions capability
+                    # but still work with the chat completions API
                     display_name = model.get('name', model_id)
                     models.append({
                         "id": model_id,
                         "name": display_name
                     })
+                    print(f"Added model: {model_id} ({display_name})")
             
             # If no models found, return empty list
             if not models:
@@ -119,7 +158,11 @@ class Pipeline:
         # This function is called when the valves are updated.
         print(f"on_valves_updated:{__name__}")
         self.update_headers()
-        self.pipelines = self.get_cloudflare_models()
+        
+        # Try to get models from API, fall back to defaults if none found
+        api_models = self.get_cloudflare_models()
+        self.pipelines = api_models if api_models else self.default_models
+        print(f"Updated with {len(self.pipelines)} models")
         pass
 
     def pipe(
