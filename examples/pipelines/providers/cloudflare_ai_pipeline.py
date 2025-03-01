@@ -29,15 +29,6 @@ class Pipeline:
         self.id = "cloudflare"
         self.name = "Cloudflare AI: "
         
-        # Add default models in case API fails
-        self.default_models = [
-            {"id": "@cf/meta/llama-3-8b-instruct", "name": "Llama 3 8B Instruct"},
-            {"id": "@cf/meta/llama-3-70b-instruct", "name": "Llama 3 70B Instruct"},
-            {"id": "@cf/mistral/mistral-7b-instruct-v0.1", "name": "Mistral 7B Instruct"},
-            {"id": "@cf/mistral/mistral-large-latest", "name": "Mistral Large"},
-            {"id": "@cf/anthropic/claude-instant-v1", "name": "Claude Instant"},
-        ]
-        
         self.valves = self.Valves(
             **{
                 "CLOUDFLARE_ACCOUNT_ID": os.getenv(
@@ -54,9 +45,8 @@ class Pipeline:
         self.base_url = "https://api.cloudflare.com/client/v4/accounts"
         self.update_headers()
         
-        # Try to get models from API, fall back to defaults if none found
-        api_models = self.get_cloudflare_models()
-        self.pipelines = api_models if api_models else self.default_models
+        # Get models from API
+        self.pipelines = self.get_cloudflare_models()
         print(f"Initialized with {len(self.pipelines)} models")
 
     def update_headers(self):
@@ -67,13 +57,17 @@ class Pipeline:
         }
 
     def get_cloudflare_models(self):
-        """Get available models from Cloudflare AI API or return empty list if unavailable"""
-        # We won't use default models anymore - only use what the API returns
+        """Get available models from Cloudflare AI API"""
+        # Define a minimal set of models that we know work with Cloudflare
+        fallback_models = [
+            {"id": "@cf/meta/llama-3-8b-instruct", "name": "Llama 3 8B Instruct"},
+            {"id": "@cf/mistral/mistral-7b-instruct-v0.1", "name": "Mistral 7B Instruct"},
+        ]
         
         # Check if we have credentials
         if not self.valves.CLOUDFLARE_API_KEY or not self.valves.CLOUDFLARE_ACCOUNT_ID:
-            print("No Cloudflare credentials provided, returning empty model list")
-            return []
+            print("No Cloudflare credentials provided, returning fallback models")
+            return fallback_models
             
         print(f"Using Cloudflare Account ID: {self.valves.CLOUDFLARE_ACCOUNT_ID[:5]}...")
         
@@ -139,10 +133,10 @@ class Pipeline:
                     })
                     print(f"Added model: {model_id} ({display_name})")
             
-            # If no models found, return empty list
+            # If no models found, return fallback models
             if not models:
-                print("No chat completion models found in API response")
-                return []
+                print("No chat completion models found in API response, using fallback models")
+                return fallback_models
                 
             # Sort models alphabetically
             models.sort(key=lambda x: x["name"])
@@ -152,7 +146,7 @@ class Pipeline:
             
         except Exception as e:
             print(f"Error fetching Cloudflare models: {str(e)}")
-            return []
+            return fallback_models
 
     async def on_startup(self):
         # This function is called when the server is started.
@@ -169,9 +163,8 @@ class Pipeline:
         print(f"on_valves_updated:{__name__}")
         self.update_headers()
         
-        # Try to get models from API, fall back to defaults if none found
-        api_models = self.get_cloudflare_models()
-        self.pipelines = api_models if api_models else self.default_models
+        # Get models from API
+        self.pipelines = self.get_cloudflare_models()
         print(f"Updated with {len(self.pipelines)} models")
         pass
 
@@ -203,7 +196,6 @@ class Pipeline:
         
         # Create a clean payload with only the fields Cloudflare API expects
         payload = {
-            "model": model_name,
             "messages": body.get("messages", []),
             "stream": body.get("stream", True),
         }
@@ -222,11 +214,8 @@ class Pipeline:
         if not payload.get("messages"):
             return "Error: No messages provided in the request"
         
-        # For Cloudflare, we need to use the chat completions endpoint
-        url = f"{self.base_url}/{self.valves.CLOUDFLARE_ACCOUNT_ID}/ai/chat/completions"
-        
-        # Add the model to the payload instead of the URL
-        payload["model"] = model_name
+        # For Cloudflare, we need to use the run endpoint with the model name in the URL
+        url = f"{self.base_url}/{self.valves.CLOUDFLARE_ACCOUNT_ID}/ai/run/{model_name}"
         
         print(f"Sending request to {url}")
         
