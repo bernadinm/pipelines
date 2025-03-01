@@ -60,7 +60,8 @@ class Pipeline:
                 )
 
                 models = r.json()
-                return [
+                # Filter for Grok models and sort by version (newest first)
+                grok_models = [
                     {
                         "id": model["id"],
                         "name": model["name"] if "name" in model else model["id"],
@@ -68,10 +69,23 @@ class Pipeline:
                     for model in models["data"]
                     if "grok" in model["id"].lower()
                 ]
+                
+                # Sort models to have newest versions first
+                grok_models.sort(key=lambda x: x["id"], reverse=True)
+                
+                return grok_models
 
             except Exception as e:
                 print(f"Error: {e}")
                 return [
+                    {
+                        "id": "grok-3",
+                        "name": "grok-3",
+                    },
+                    {
+                        "id": "grok-2",
+                        "name": "grok-2",
+                    },
                     {
                         "id": "grok-1",
                         "name": "grok-1",
@@ -87,6 +101,14 @@ class Pipeline:
                 ]
         else:
             return [
+                {
+                    "id": "grok-3",
+                    "name": "grok-3",
+                },
+                {
+                    "id": "grok-2",
+                    "name": "grok-2",
+                },
                 {
                     "id": "grok-1",
                     "name": "grok-1",
