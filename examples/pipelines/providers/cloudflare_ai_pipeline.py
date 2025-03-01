@@ -54,24 +54,13 @@ class Pipeline:
         }
 
     def get_cloudflare_models(self):
-        """Get available models from Cloudflare AI API or return defaults if unavailable"""
-        # Default models to use if API call fails or no credentials are provided
-        default_models = [
-            {"id": "@cf/meta/llama-3.1-8b-instruct", "name": "Llama 3.1 8B Instruct"},
-            {"id": "@cf/meta/llama-3.1-70b-instruct", "name": "Llama 3.1 70B Instruct"},
-            {"id": "@cf/meta/llama-3-8b-instruct", "name": "Llama 3 8B Instruct"},
-            {"id": "@cf/meta/llama-3-70b-instruct", "name": "Llama 3 70B Instruct"},
-            {"id": "@cf/mistral/mistral-7b-instruct-v0.1", "name": "Mistral 7B Instruct"},
-            {"id": "@cf/mistral/mistral-large-latest", "name": "Mistral Large"},
-            {"id": "@cf/anthropic/claude-3-haiku-20240307", "name": "Claude 3 Haiku"},
-            {"id": "@cf/anthropic/claude-3-sonnet-20240229", "name": "Claude 3 Sonnet"},
-            {"id": "@cf/anthropic/claude-3-opus-20240229", "name": "Claude 3 Opus"},
-        ]
+        """Get available models from Cloudflare AI API or return empty list if unavailable"""
+        # We won't use default models anymore - only use what the API returns
         
         # Check if we have credentials
         if not self.valves.CLOUDFLARE_API_KEY or not self.valves.CLOUDFLARE_ACCOUNT_ID:
-            print("No Cloudflare credentials provided, using default models")
-            return default_models
+            print("No Cloudflare credentials provided, returning empty model list")
+            return []
         
         try:
             # Try to get models from the API
@@ -82,13 +71,13 @@ class Pipeline:
             
             if response.status_code != 200:
                 print(f"Failed to fetch models: {response.status_code} {response.reason}")
-                return default_models
+                return []
                 
             data = response.json()
             
             if not data.get('success', False) or 'result' not in data:
                 print(f"Unexpected response format: {data}")
-                return default_models
+                return []
                 
             # Extract models from the response
             models = []
@@ -101,10 +90,10 @@ class Pipeline:
                         "name": display_name
                     })
             
-            # If no models found, use defaults
+            # If no models found, return empty list
             if not models:
-                print("No chat completion models found in API response, using defaults")
-                return default_models
+                print("No chat completion models found in API response")
+                return []
                 
             # Sort models alphabetically
             models.sort(key=lambda x: x["name"])
@@ -114,7 +103,7 @@ class Pipeline:
             
         except Exception as e:
             print(f"Error fetching Cloudflare models: {str(e)}")
-            return default_models
+            return []
 
     async def on_startup(self):
         # This function is called when the server is started.
@@ -146,8 +135,18 @@ class Pipeline:
             return "Error: No Cloudflare Account ID provided. Please add your Account ID in the pipeline valves."
         
         # Extract just the model name without the pipeline prefix
-        model_name = model_id.split(".")[-1] if "." in model_id else model_id
+        model_name = model_id.split(".", 1)[-1] if "." in model_id else model_id
         print(f"Using model: {model_name}")
+        
+        # Verify the model exists in our list of models
+        model_exists = False
+        for model in self.pipelines:
+            if model["id"] == model_name:
+                model_exists = True
+                break
+                
+        if not model_exists:
+            return f"Error: Model '{model_name}' not found in available Cloudflare models. Please select a different model."
         
         # Create a clean payload with only the fields Cloudflare API expects
         payload = {
