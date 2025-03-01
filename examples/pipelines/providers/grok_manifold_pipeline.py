@@ -21,16 +21,19 @@ class Pipeline:
         # self.id = "grok_pipeline"
         self.name = "Grok: "
 
+        # Initialize with environment variables if available
         self.valves = self.Valves(
             **{
-                "GROK_API_KEY": os.getenv(
-                    "GROK_API_KEY", "your-grok-api-key-here"
-                )
+                "GROK_API_KEY": os.getenv("GROK_API_KEY", ""),
+                "GROK_API_BASE_URL": os.getenv("GROK_API_BASE_URL", "https://api.x.ai/v1")
             }
         )
 
+        # Get available models
         self.pipelines = self.get_grok_models()
-        pass
+        
+        # Log initialization
+        print(f"Initialized Grok pipeline with {len(self.pipelines)} models")
 
     async def on_startup(self):
         # This function is called when the server is started.
@@ -49,136 +52,35 @@ class Pipeline:
         pass
 
     def get_grok_models(self):
-        if self.valves.GROK_API_KEY:
-            try:
-                headers = {}
-                headers["Authorization"] = f"Bearer {self.valves.GROK_API_KEY}"
-                headers["Content-Type"] = "application/json"
-
-                r = requests.get(
-                    f"{self.valves.GROK_API_BASE_URL}/models", headers=headers
-                )
-
-                models = r.json()
-                # Filter for Grok models and sort by version (newest first)
-                grok_models = [
-                    {
-                        "id": model["id"],
-                        "name": model["name"] if "name" in model else model["id"],
-                    }
-                    for model in models["data"]
-                    if "grok" in model["id"].lower()
-                ]
-                
-                # Sort models to have newest versions first
-                grok_models.sort(key=lambda x: x["id"], reverse=True)
-                
-                return grok_models
-
-            except Exception as e:
-                print(f"Error: {e}")
-                return [
-                    {
-                        "id": "grok-3",
-                        "name": "grok-3",
-                    },
-                    {
-                        "id": "grok-2",
-                        "name": "grok-2",
-                    },
-                    {
-                        "id": "grok-1",
-                        "name": "grok-1",
-                    },
-                    {
-                        "id": "grok-1-mini",
-                        "name": "grok-1-mini",
-                    },
-                    {
-                        "id": "error",
-                        "name": "Could not fetch models from X.AI, please update the API Key in the valves.",
-                    },
-                ]
-        else:
-            return [
-                {
-                    "id": "grok-3",
-                    "name": "grok-3",
-                },
-                {
-                    "id": "grok-2",
-                    "name": "grok-2",
-                },
-                {
-                    "id": "grok-1",
-                    "name": "grok-1",
-                },
-                {
-                    "id": "grok-1-mini",
-                    "name": "grok-1-mini",
-                },
-            ]
-
-    def pipe(
-        self, user_message: str, model_id: str, messages: List[dict], body: dict
-    ) -> Union[str, Generator, Iterator]:
-        # This is where you can add your custom pipelines like RAG.
-        print(f"pipe:{__name__}")
-
-        print("Messages:", messages)
-        print("User message:", user_message)
-        print("Original body:", body)
-
-        headers = {}
-        headers["Authorization"] = f"Bearer {self.valves.GROK_API_KEY}"
-        headers["Content-Type"] = "application/json"
-
-        # Extract just the model name without the pipeline prefix
-        model_name = model_id.split(".")[-1] if "." in model_id else model_id
+        # Default models to use if API call fails or no API key is provided
+        default_models = [
+            {"id": "grok-1", "name": "Grok-1"},
+            {"id": "grok-1-mini", "name": "Grok-1 Mini"},
+        ]
         
-        # Create a clean payload with only the fields Grok API expects
-        payload = {
-            "model": model_name,
-            "messages": body.get("messages", []),
-            "stream": body.get("stream", True),
-            "temperature": body.get("temperature", 0.7),
-            "max_tokens": body.get("max_tokens", 4096) if "max_tokens" in body else None,
-            "top_p": body.get("top_p", 1.0) if "top_p" in body else None,
-        }
+        # Check if we have an API key
+        if not self.valves.GROK_API_KEY:
+            print("No Grok API key provided, using default models")
+            return default_models
         
-        # Remove None values
-        payload = {k: v for k, v in payload.items() if v is not None}
-        
-        # Remove fields that Grok API doesn't expect
-        if "user" in payload:
-            del payload["user"]
-        if "chat_id" in payload:
-            del payload["chat_id"]
-        if "title" in payload:
-            del payload["title"]
-
-        # Ensure messages are in the correct format for Grok API
-        if "messages" in payload and isinstance(payload["messages"], list):
-            # Make sure each message has the required fields
-            for message in payload["messages"]:
-                if "role" not in message or "content" not in message:
-                    print(f"Warning: Message missing required fields: {message}")
-
-        print("Sending payload to Grok API:", payload)
-
         try:
-            r = requests.post(
-                url=f"{self.valves.GROK_API_BASE_URL}/chat/completions",
-                json=payload,
+            # Set up headers for API request
+            headers = {
+                "Authorization": f"Bearer {self.valves.GROK_API_KEY}",
+                "Content-Type": "application/json"
+            }
+            
+            # First try to get models from the API
+            print(f"Fetching models from {self.valves.GROK_API_BASE_URL}/models")
+            r = requests.get(
+                f"{self.valves.GROK_API_BASE_URL}/models", 
                 headers=headers,
-                stream=True,
+                timeout=10  # Add timeout to prevent hanging
             )
-
-            # Print response status and headers for debugging
-            print(f"Response status: {r.status_code}")
-            print(f"Response headers: {r.headers}")
-
+            
+            # Check if request was successful
             if r.status_code != 200:
+                print(f"Failed to fetch models: {r.status_code} {r.reason}")
                 error_detail = ""
                 try:
                     error_detail = r.json()
@@ -189,13 +91,128 @@ class Pipeline:
                         print(f"Error text: {error_detail}")
                     except:
                         pass
-                
-                return f"Error: {r.status_code} {r.reason} for url: {r.url}. Details: {error_detail}"
+                return default_models
+            
+            # Parse the response
+            models_data = r.json()
+            
+            # Check if we got a valid response with data
+            if not isinstance(models_data, dict) or "data" not in models_data:
+                print(f"Unexpected response format: {models_data}")
+                return default_models
+            
+            # Filter for Grok models
+            grok_models = []
+            for model in models_data["data"]:
+                model_id = model.get("id", "")
+                if isinstance(model_id, str) and "grok" in model_id.lower():
+                    grok_models.append({
+                        "id": model_id,
+                        "name": model.get("name", model_id)
+                    })
+            
+            # If no Grok models found, use defaults
+            if not grok_models:
+                print("No Grok models found in API response, using defaults")
+                return default_models
+            
+            # Sort models to have newest versions first (assuming version numbers in names)
+            grok_models.sort(key=lambda x: x["id"], reverse=True)
+            
+            print(f"Found {len(grok_models)} Grok models: {[m['id'] for m in grok_models]}")
+            return grok_models
 
-            if body["stream"]:
+        except Exception as e:
+            print(f"Error fetching Grok models: {str(e)}")
+            return default_models
+
+    def pipe(
+        self, user_message: str, model_id: str, messages: List[dict], body: dict
+    ) -> Union[str, Generator, Iterator]:
+        """Process a chat completion request through the Grok API"""
+        print(f"pipe:{__name__}")
+        
+        # Check if API key is provided
+        if not self.valves.GROK_API_KEY:
+            return "Error: No Grok API key provided. Please add your API key in the pipeline valves."
+        
+        # Extract just the model name without the pipeline prefix
+        model_name = model_id.split(".")[-1] if "." in model_id else model_id
+        print(f"Using model: {model_name}")
+        
+        # Set up headers
+        headers = {
+            "Authorization": f"Bearer {self.valves.GROK_API_KEY}",
+            "Content-Type": "application/json"
+        }
+        
+        # Create a clean payload with only the fields Grok API expects
+        payload = {
+            "model": model_name,
+            "messages": body.get("messages", []),
+            "stream": body.get("stream", True),
+        }
+        
+        # Add optional parameters if they exist in the body
+        for param in ["temperature", "top_p", "max_tokens", "presence_penalty", "frequency_penalty"]:
+            if param in body and body[param] is not None:
+                payload[param] = body[param]
+        
+        # Validate messages format
+        if not payload.get("messages"):
+            return "Error: No messages provided in the request"
+        
+        for i, message in enumerate(payload["messages"]):
+            if "role" not in message:
+                print(f"Warning: Message {i} missing 'role' field")
+                message["role"] = "user"  # Default to user role
+            
+            if "content" not in message:
+                print(f"Warning: Message {i} missing 'content' field")
+                message["content"] = ""  # Default to empty content
+        
+        print(f"Sending request to {self.valves.GROK_API_BASE_URL}/chat/completions")
+        
+        try:
+            # Make the API request
+            r = requests.post(
+                url=f"{self.valves.GROK_API_BASE_URL}/chat/completions",
+                json=payload,
+                headers=headers,
+                stream=True,
+                timeout=60  # Add timeout to prevent hanging
+            )
+            
+            # Handle non-200 responses
+            if r.status_code != 200:
+                error_message = f"Error: {r.status_code} {r.reason} for url: {r.url}"
+                
+                try:
+                    error_detail = r.json()
+                    print(f"Error response: {error_detail}")
+                    if isinstance(error_detail, dict) and "error" in error_detail:
+                        error_message += f". {error_detail['error'].get('message', '')}"
+                except:
+                    try:
+                        error_detail = r.text
+                        print(f"Error text: {error_detail}")
+                        if error_detail:
+                            error_message += f". Details: {error_detail}"
+                    except:
+                        pass
+                
+                return error_message
+            
+            # Return the response based on streaming preference
+            if payload["stream"]:
                 return r.iter_lines()
             else:
                 return r.json()
+                
+        except requests.exceptions.Timeout:
+            return "Error: Request to Grok API timed out. Please try again later."
+        except requests.exceptions.ConnectionError:
+            return "Error: Could not connect to Grok API. Please check your internet connection."
         except Exception as e:
             print(f"Exception in Grok API call: {str(e)}")
             return f"Error: {str(e)}"
