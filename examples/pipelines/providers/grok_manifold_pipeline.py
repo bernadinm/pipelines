@@ -125,15 +125,31 @@ class Pipeline:
         # This is where you can add your custom pipelines like RAG.
         print(f"pipe:{__name__}")
 
-        print(messages)
-        print(user_message)
+        print("Messages:", messages)
+        print("User message:", user_message)
+        print("Original body:", body)
 
         headers = {}
         headers["Authorization"] = f"Bearer {self.valves.GROK_API_KEY}"
         headers["Content-Type"] = "application/json"
 
-        payload = {**body, "model": model_id}
-
+        # Extract just the model name without the pipeline prefix
+        model_name = model_id.split(".")[-1] if "." in model_id else model_id
+        
+        # Create a clean payload with only the fields Grok API expects
+        payload = {
+            "model": model_name,
+            "messages": body.get("messages", []),
+            "stream": body.get("stream", True),
+            "temperature": body.get("temperature", 0.7),
+            "max_tokens": body.get("max_tokens", 4096) if "max_tokens" in body else None,
+            "top_p": body.get("top_p", 1.0) if "top_p" in body else None,
+        }
+        
+        # Remove None values
+        payload = {k: v for k, v in payload.items() if v is not None}
+        
+        # Remove fields that Grok API doesn't expect
         if "user" in payload:
             del payload["user"]
         if "chat_id" in payload:
@@ -141,7 +157,14 @@ class Pipeline:
         if "title" in payload:
             del payload["title"]
 
-        print(payload)
+        # Ensure messages are in the correct format for Grok API
+        if "messages" in payload and isinstance(payload["messages"], list):
+            # Make sure each message has the required fields
+            for message in payload["messages"]:
+                if "role" not in message or "content" not in message:
+                    print(f"Warning: Message missing required fields: {message}")
+
+        print("Sending payload to Grok API:", payload)
 
         try:
             r = requests.post(
@@ -151,11 +174,28 @@ class Pipeline:
                 stream=True,
             )
 
-            r.raise_for_status()
+            # Print response status and headers for debugging
+            print(f"Response status: {r.status_code}")
+            print(f"Response headers: {r.headers}")
+
+            if r.status_code != 200:
+                error_detail = ""
+                try:
+                    error_detail = r.json()
+                    print(f"Error response: {error_detail}")
+                except:
+                    try:
+                        error_detail = r.text
+                        print(f"Error text: {error_detail}")
+                    except:
+                        pass
+                
+                return f"Error: {r.status_code} {r.reason} for url: {r.url}. Details: {error_detail}"
 
             if body["stream"]:
                 return r.iter_lines()
             else:
                 return r.json()
         except Exception as e:
-            return f"Error: {e}"
+            print(f"Exception in Grok API call: {str(e)}")
+            return f"Error: {str(e)}"
