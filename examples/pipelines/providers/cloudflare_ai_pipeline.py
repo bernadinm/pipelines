@@ -49,7 +49,8 @@ class Pipeline:
     def update_headers(self):
         self.headers = {
             'Authorization': f'Bearer {self.valves.CLOUDFLARE_API_KEY}',
-            'Content-Type': 'application/json'
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
         }
 
     def get_cloudflare_models(self):
@@ -173,6 +174,9 @@ class Pipeline:
         print(f"Sending request to {url}")
         
         try:
+            # Debug information
+            print(f"Sending payload to Cloudflare API: {json.dumps(payload, indent=2)}")
+            
             # Make the API request
             r = requests.post(
                 url=url,
