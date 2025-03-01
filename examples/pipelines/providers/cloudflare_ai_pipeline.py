@@ -82,9 +82,9 @@ class Pipeline:
         print(f"Using Cloudflare Account ID: {self.valves.CLOUDFLARE_ACCOUNT_ID[:5]}...")
         
         try:
-            # Try to get models from the API
+            # Try to get models from the API using the correct search endpoint
             print(f"Fetching models from Cloudflare AI API")
-            url = f"{self.base_url}/{self.valves.CLOUDFLARE_ACCOUNT_ID}/ai/models"
+            url = f"{self.base_url}/{self.valves.CLOUDFLARE_ACCOUNT_ID}/ai/models/search"
             print(f"Request URL: {url}")
             print(f"Request headers: {self.headers}")
             
@@ -111,18 +111,32 @@ class Pipeline:
                 
             # Extract models from the response
             models = []
-            print(f"Processing {len(data.get('result', []))} models from response")
+            result_data = data.get('result', [])
+            print(f"Processing {len(result_data)} models from response")
             
-            for model in data.get('result', []):
+            for model in result_data:
                 model_id = model.get('id', '')
                 capabilities = model.get('capabilities', {})
-                print(f"Model: {model_id}, Capabilities: {capabilities}")
                 
-                # Check if model supports chat completions
-                if model_id:
-                    # Some models might not explicitly list chat_completions capability
-                    # but still work with the chat completions API
+                # Check if model is a text generation model that can be used for chat
+                is_text_model = False
+                model_type = model.get('type', '').lower()
+                
+                # Models that can be used for chat completions
+                if model_type in ['text-generation', 'chat-completions', 'text-to-text'] or 'chat' in model_type:
+                    is_text_model = True
+                
+                print(f"Model: {model_id}, Type: {model_type}, Capabilities: {capabilities}")
+                
+                # Include all models that might work with chat completions
+                if model_id and (is_text_model or 'chat_completions' in str(capabilities).lower()):
                     display_name = model.get('name', model_id)
+                    
+                    # Add model provider to name if available
+                    provider = model.get('provider', '')
+                    if provider and provider.lower() not in display_name.lower():
+                        display_name = f"{display_name} ({provider})"
+                    
                     models.append({
                         "id": model_id,
                         "name": display_name
@@ -192,8 +206,9 @@ class Pipeline:
             return f"Error: Model '{model_name}' not found in available Cloudflare models. Please select a different model."
         
         # Create a clean payload with only the fields Cloudflare API expects
+        # Note: Cloudflare expects the model name without the @cf/ prefix in the URL
+        # but we keep it in the model_name variable for validation
         payload = {
-            "model": model_name,
             "messages": body.get("messages", []),
             "stream": body.get("stream", True),
         }
@@ -212,7 +227,9 @@ class Pipeline:
         if not payload.get("messages"):
             return "Error: No messages provided in the request"
         
-        url = f"{self.base_url}/{self.valves.CLOUDFLARE_ACCOUNT_ID}/ai/v1/chat/completions"
+        # For Cloudflare, we need to use the run endpoint with the model name in the URL
+        # The model name should be passed without the @cf/ prefix in the URL
+        url = f"{self.base_url}/{self.valves.CLOUDFLARE_ACCOUNT_ID}/ai/run/{model_name}"
         print(f"Sending request to {url}")
         
         try:
