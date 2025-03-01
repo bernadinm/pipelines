@@ -5,6 +5,7 @@ PORT=9099
 # Define environment variables using pass
 GOOGLE_API_KEY=$(shell pass aistudio.google.com/mbp-api-key)
 GROQ_API_KEY=$(shell pass groq.com/mbp-api-key)
+GROK_API_KEY=$(shell pass x.ai/mbp-api-key)
 OPENAI_API_KEY=$(shell pass openai.com/Miguels-MBP/api-key)
 ANTHROPIC_API_KEY=$(shell pass anthropic.com/mbp-api-key)
 CLOUDFLARE_API_KEY=$(shell pass cloudflare.com/mbp-api-wokerai-api-key)
@@ -16,9 +17,11 @@ VOLUMES = \
 	perplexity_manifold_pipeline \
 	cloudflare_ai_pipeline \
 	groq_manifold_pipeline \
+	grok_manifold_pipeline \
 	ollama_pipeline \
 	openai_manifold_pipeline \
-	google_manifold_pipeline 
+	google_manifold_pipeline \
+	youtube_search_pipe
 
 all: run
 
@@ -29,6 +32,7 @@ run: stop
 		--add-host=host.docker.internal:host-gateway \
 		-e GOOGLE_API_KEY="$(GOOGLE_API_KEY)" \
 		-e GROQ_API_KEY="$(GROQ_API_KEY)" \
+		-e GROK_API_KEY="$(GROK_API_KEY)" \
 		-e OPENAI_API_KEY="$(OPENAI_API_KEY)" \
 		-e ANTHROPIC_API_KEY="$(ANTHROPIC_API_KEY)" \
 		-e CLOUDFLARE_API_KEY="$(CLOUDFLARE_API_KEY)" \
