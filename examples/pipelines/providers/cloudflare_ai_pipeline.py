@@ -194,8 +194,9 @@ class Pipeline:
         if not model_exists:
             return f"Error: Model '{model_name}' not found in available Cloudflare models. Please select a different model."
         
-        # Create a clean payload with only the fields Cloudflare API expects
+        # Create a clean payload with only the fields Cloudflare API expects for chat completions
         payload = {
+            "model": model_name,
             "messages": body.get("messages", []),
             "stream": body.get("stream", True),
         }
@@ -214,8 +215,11 @@ class Pipeline:
         if not payload.get("messages"):
             return "Error: No messages provided in the request"
         
-        # For Cloudflare, we need to use the run endpoint with the model name in the URL
-        url = f"{self.base_url}/{self.valves.CLOUDFLARE_ACCOUNT_ID}/ai/run/{model_name}"
+        # For Cloudflare, we need to use the chat completions endpoint
+        url = f"{self.base_url}/{self.valves.CLOUDFLARE_ACCOUNT_ID}/ai/v1/chat/completions"
+        
+        # Add the model to the payload
+        payload["model"] = model_name
         
         print(f"Sending request to {url}")
         
@@ -238,9 +242,17 @@ class Pipeline:
                 
                 try:
                     error_detail = r.json()
-                    print(f"Error response: {error_detail}")
-                    if isinstance(error_detail, dict) and "errors" in error_detail:
-                        error_message += f". {error_detail['errors'][0]['message'] if error_detail['errors'] else ''}"
+                    print(f"Error response: {json.dumps(error_detail, indent=2)}")
+                    
+                    # Extract error message from different possible formats
+                    if isinstance(error_detail, dict):
+                        if "errors" in error_detail and error_detail["errors"]:
+                            error_message += f". {error_detail['errors'][0]['message'] if error_detail['errors'] else ''}"
+                        elif "error" in error_detail:
+                            if isinstance(error_detail["error"], dict) and "message" in error_detail["error"]:
+                                error_message += f". {error_detail['error']['message']}"
+                            else:
+                                error_message += f". {error_detail['error']}"
                 except:
                     try:
                         error_detail = r.text
@@ -249,6 +261,9 @@ class Pipeline:
                             error_message += f". Details: {error_detail}"
                     except:
                         pass
+                
+                # Add troubleshooting information
+                error_message += "\n\nTroubleshooting: Please check that your Cloudflare API key and Account ID are correct and have the necessary permissions."
                 
                 return error_message
             
