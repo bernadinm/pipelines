@@ -83,9 +83,9 @@ class Pipeline:
         if system_message is not None:
             system_prompt = system_message["content"]
 
-        print(system_prompt)
-        print(messages)
-        print(user_message)
+        print(f"System prompt: {system_prompt}")
+        print(f"Messages: {messages}")
+        print(f"User message: {user_message}")
 
         headers = {
             "Authorization": f"Bearer {self.valves.PERPLEXITY_API_KEY}",
@@ -93,12 +93,23 @@ class Pipeline:
             "accept": "application/json"
         }
 
+        # Format messages properly for Perplexity API
+        formatted_messages = [{"role": "system", "content": system_prompt}]
+        
+        # Add all previous messages from the conversation history
+        for msg in messages:
+            formatted_messages.append({
+                "role": msg.get("role", "user"),
+                "content": msg.get("content", "")
+            })
+            
+        # Add the current user message if it's not empty and not already in messages
+        if user_message and (not messages or messages[-1]["role"] != "user" or messages[-1]["content"] != user_message):
+            formatted_messages.append({"role": "user", "content": user_message})
+            
         payload = {
             "model": model_id,
-            "messages": [
-                {"role": "system", "content": system_prompt},
-                *messages
-            ],
+            "messages": formatted_messages,
             "stream": body.get("stream", True),
             "return_citations": True,
             "return_images": True
@@ -111,7 +122,7 @@ class Pipeline:
         if "title" in payload:
             del payload["title"]
 
-        print(payload)
+        print(f"Payload to Perplexity API: {payload}")
 
         try:
             r = requests.post(
