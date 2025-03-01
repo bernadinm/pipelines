@@ -8,8 +8,8 @@ import requests
 
 class Pipeline:
     class Valves(BaseModel):
-        OPENAI_API_BASE_URL: str = "https://api.openai.com/v1"
-        OPENAI_API_KEY: str = ""
+        GROK_API_BASE_URL: str = "https://api.x.ai/v1"
+        GROK_API_KEY: str = ""
         pass
 
     def __init__(self):
@@ -18,18 +18,18 @@ class Pipeline:
         # Best practice is to not specify the id so that it can be automatically inferred from the filename, so that users can install multiple versions of the same pipeline.
         # The identifier must be unique across all pipelines.
         # The identifier must be an alphanumeric string that can include underscores or hyphens. It cannot contain spaces, special characters, slashes, or backslashes.
-        # self.id = "openai_pipeline"
-        self.name = "OpenAI: "
+        # self.id = "grok_pipeline"
+        self.name = "Grok: "
 
         self.valves = self.Valves(
             **{
-                "OPENAI_API_KEY": os.getenv(
-                    "OPENAI_API_KEY", "your-openai-api-key-here"
+                "GROK_API_KEY": os.getenv(
+                    "GROK_API_KEY", "your-grok-api-key-here"
                 )
             }
         )
 
-        self.pipelines = self.get_openai_models()
+        self.pipelines = self.get_grok_models()
         pass
 
     async def on_startup(self):
@@ -45,18 +45,18 @@ class Pipeline:
     async def on_valves_updated(self):
         # This function is called when the valves are updated.
         print(f"on_valves_updated:{__name__}")
-        self.pipelines = self.get_openai_models()
+        self.pipelines = self.get_grok_models()
         pass
 
-    def get_openai_models(self):
-        if self.valves.OPENAI_API_KEY:
+    def get_grok_models(self):
+        if self.valves.GROK_API_KEY:
             try:
                 headers = {}
-                headers["Authorization"] = f"Bearer {self.valves.OPENAI_API_KEY}"
+                headers["Authorization"] = f"Bearer {self.valves.GROK_API_KEY}"
                 headers["Content-Type"] = "application/json"
 
                 r = requests.get(
-                    f"{self.valves.OPENAI_API_BASE_URL}/models", headers=headers
+                    f"{self.valves.GROK_API_BASE_URL}/models", headers=headers
                 )
 
                 models = r.json()
@@ -66,20 +66,36 @@ class Pipeline:
                         "name": model["name"] if "name" in model else model["id"],
                     }
                     for model in models["data"]
-                    if "gpt" in model["id"] or "o1" in model["id"] or "o3" in model["id"]
+                    if "grok" in model["id"].lower()
                 ]
 
             except Exception as e:
-
                 print(f"Error: {e}")
                 return [
                     {
+                        "id": "grok-1",
+                        "name": "grok-1",
+                    },
+                    {
+                        "id": "grok-1-mini",
+                        "name": "grok-1-mini",
+                    },
+                    {
                         "id": "error",
-                        "name": "Could not fetch models from OpenAI, please update the API Key in the valves.",
+                        "name": "Could not fetch models from X.AI, please update the API Key in the valves.",
                     },
                 ]
         else:
-            return []
+            return [
+                {
+                    "id": "grok-1",
+                    "name": "grok-1",
+                },
+                {
+                    "id": "grok-1-mini",
+                    "name": "grok-1-mini",
+                },
+            ]
 
     def pipe(
         self, user_message: str, model_id: str, messages: List[dict], body: dict
@@ -91,7 +107,7 @@ class Pipeline:
         print(user_message)
 
         headers = {}
-        headers["Authorization"] = f"Bearer {self.valves.OPENAI_API_KEY}"
+        headers["Authorization"] = f"Bearer {self.valves.GROK_API_KEY}"
         headers["Content-Type"] = "application/json"
 
         payload = {**body, "model": model_id}
@@ -107,7 +123,7 @@ class Pipeline:
 
         try:
             r = requests.post(
-                url=f"{self.valves.OPENAI_API_BASE_URL}/chat/completions",
+                url=f"{self.valves.GROK_API_BASE_URL}/chat/completions",
                 json=payload,
                 headers=headers,
                 stream=True,
